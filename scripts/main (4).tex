@@ -1,0 +1,855 @@
+\documentclass[journal,twoside,web]{ieeecolor}
+\usepackage{generic}
+\usepackage{cite}
+\usepackage{tabularx}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage[ruled,vlined,linesnumbered]{algorithm2e}
+\usepackage[caption = false]{subfig}
+\usepackage[backend=biber]{biblatex} 
+\addbibresource{./references.bib}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\hypersetup{hidelinks=true}
+\usepackage{textcomp}
+\usepackage{tikz}
+\usetikzlibrary{positioning, arrows.meta}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+\markboth{\hskip25pc IEEE TRANSACTIONS AND JOURNALS TEMPLATE}
+{Author \MakeLowercase{\textit{et al.}}: Title}
+\begin{document}
+
+\title{FL-SQMPC: Secure Quantized Aggregation for Mitigating Gradient Inversion Attacks in Federated IoT Intrusion Detection}
+\author{Imene Bessaa, Zakaria Abou EL Houda,  Member, IEEE, Lyes Khoukhi, Senior Member, IEEE
+\thanks{ I. Bessaa is with the INRS-EMT, UMR INRS-UQO, University of Quebec, Canada,(imene.bessaa@inrs.ca).}
+\thanks{Z. A. El Houda is with the INRS-EMT, UMR INRS-UQO, University of Quebec, Canada, e-mail: (zakaria.abouelhouda@inrs.ca).}
+\thanks{L. Khoukhi is with CNAM, France, e-mail: (lyes.khoukhi@cnam.fr).}
+}  
+
+\maketitle
+
+\begin{abstract}
+%Federated Learning(FL) enables collaborative intrusion detection across distributed Internet of Things (IoT) environments without centralizing raw traffic data. However, recent studies have demonstrated that gradient inversion attacks (GIA) can reconstruct sensitive tabular features directly from transmitted client updates, raising critical privacy concerns. 
+%We propose FL-SQMPC, an efficient secure aggregation mechanism that combines layer-wise mixed-precision quantization with fixed-point encoding and additive secret sharing over a prime field, so the server observes only a quantized cohort aggregate.
+
+
+\begin{abstract}
+Federated Learning enables collaborative model training without centralizing raw data, but the exchange of model updates exposes clients to gradient inversion attacks (GIAs), which can reconstruct private training records from communicated gradients alone. Tabular IoT intrusion detection is a setting of particular concern: mixed-type features directly encode protocol identifiers and device-level statistics, and non-IID client distributions produce update patterns that carry client-specific information not sufficiently addressed by existing defenses.
+
+We propose FL-SQMPC, a secure aggregation protocol that combines layer-wise mixed-precision quantization, fixed-point encoding, and additive secret sharing over a prime field. The secret sharing component limits server-side observability of individual client updates under a non-collusion assumption on the Secure aggregators, while quantization reduces reconstruction accuracy through controlled precision loss in the transmitted representation.
+We evaluate FL-SQMPC on Bot-IoT and CICIoT2023 under IID and non-IID partitions, comparing against Differential Privacy and CKKS-based Homomorphic Encryption. FL-SQMPC reduces gradient reconstruction accuracy relative to unprotected federated learning by ...while maintaining classification utility and incurring lower computational overhead than Homomorphic Encryption. Against CiDIoT, FL-SQMPC achieves (accuracy~=~\ldots\%, improvement~=~\ldots\%), and the
+results suggest a practical privacy--utility--efficiency trade-off for resource-constrained IoT deployments.
+\end{abstract}
+
+
+  
+\end{abstract}
+
+.
+
+\begin{IEEEkeywords}
+Federated Learning (FL), IoT Security, Gradient Inversion Attacks (GIAs), Encryption, Homomorphic Encryption (HE), Secure Multi-Party Computation (SMPC), Differential Privacy (DP).
+\end{IEEEkeywords}
+
+
+\section{Introduction}
+\label{sec:introduction}
+Federated Learning (FL) enables multiple distributed clients to collaboratively train a shared model without exchanging raw local data~\cite{mcmahan2017fedavg}. This decentralized learning paradigm is particularly relevant for Internet of Things (IoT) intrusion detection, where network traffic records often contain sensitive device identifiers, protocol information, and behavioral metadata. By keeping data on-device, FL reduces the need for centralized data collection and better aligns with privacy and regulatory requirements commonly encountered in IoT environments.
+
+However, FL does not inherently provide strong privacy guarantees. Recent studies have shown that private training information can be reconstructed directly from shared gradients or model updates~\cite{zhu2019dlg,geiping2020inverting}. These gradient inversion attacks (GIAs) are concerning for tabular data, where individual features preserve strong semantic meaning and remain encoded in the update. Unlike image representations, even partial reconstruction of tabular attributes may reveal sensitive information~\cite{vero2023tableak}. In IoT intrusion detection systems, this issue becomes critical since features may include protocol identifiers, traffic statistics, and device-specific metadata that can expose user activity or network behavior under an honest-but-curious server assumption.
+
+To mitigate gradient leakage, several privacy-preserving approaches have been explored in FL. Differential Privacy (DP) limits client contributions through gradient clipping and calibrated noise addition~\cite{dwork2014dp,geyer2017dpfl}, but often reduces model utility, especially in heterogeneous non-IID settings~\cite{li2020convergence}. Homomorphic Encryption (HE) protects client updates during aggregation by operating directly on encrypted values~\cite{phong2018he,cheon2017ckks}, although its computational and communication costs remain high for practical large-scale deployments. Secure aggregation protocols based on secure multi-party computation (SMPC) prevent the server from observing individual updates and reveal only the aggregated model update~\cite{bonawitz2017secureagg}. Most prior studies evaluate theese methods on image-based workloads rather than tabular IoT data~\cite{zhang2022surveyGI}. As highlighted in recent work~\cite{vero2023tableak,houda2023mitfed}, the privacy behavior of such mechanisms on tabular intrusion detection datasets remains insufficiently understood. Moreover, secure aggregation alone does not fully eliminate reconstruction risks. Recent findings show that adversarial clients or compromised aggregation settings may still leak private information even when only aggregated updates are available~\cite{Sun2024ClientSideGIA}.
+
+These observations suggest that protecting only the visibility of client updates may not be sufficient. Even if individual gradients remain hidden, the transmitted representation itself can still retain significant reconstructive information. 
+
+%Recent work on communication compression has shown that update quantization not only reduces communication overhead, but also introduces information loss that may limit reconstruction fidelity~\cite{alistarh2017qsgd}. QuanCrypt-FL further demonstrated that combining clipping, quantization, and pruning can improve both communication efficiency and resistance to gradient inversion attacks~\cite{islam2024quancrypt}. Nevertheless, quantization alone does not provide secure aggregation guarantees, and its interaction with SMPC-based aggregation under non-IID tabular IoT settings remains largely unexplored.
+
+To address this gap, we propose \textbf{FL-SQMPC}, a secure quantized aggregation framework for federated IoT intrusion detection. FL-SQMPC combines layer-wise mixed-precision quantization and additive secret sharing over a prime field to jointly reduce update observability and reconstruction accuracy. 
+%In the proposed design, the server never accesses plaintext client updates and only observes a securely aggregated quantized representation. This enables a practical balance between privacy protection, communication efficiency, and model utility.
+
+We evaluate FL-SQMPC on the Bot-IoT, ToNIoT and CICIoT2023 datasets~\cite{moustafa2019botiot,toniot,nader2023ciciot} under both IID and non-IID client distributions. We further compare the proposed framework against Differential Privacy, CIDIoT~\cite{10376416}  and CKKS-based Homomorphic Encryption baselines to analyze privacy--utility--efficiency trade-offs in a unified federated learning setting.
+
+Our contributions are summarized as follows:
+
+We design and implement \textbf{FL-SQMPC}, a secure quantized aggregation framework that combines mixed-precision quantization, fixed-point encoding, and additive secret sharing over a prime field to jointly reduce update observability and transmitted information content.
+
+We provide a systematic empirical evaluation of GIAs on mixed-type tabular IoT datasets under both IID and non-IID federated settings 
+
+We analyze the resulting privacy--utility--efficiency trade-offs against representative DP- and HE-based baselines within a unified FL pipeline, 
+
+
+The remainder of this paper is organized as follows. Section~\ref{sec:related} reviews related work. Section~\ref{sec:system} presents the system model and the proposed FL-SQMPC framework. Section~\ref{sec:threat} describes the threat model. Section~\ref{sec:selection} introduces the game-theoretic client selection mechanism. Section~\ref{sec:results} reports the experimental evaluation and analysis. Finally, Section~\ref{sec:conclusion} concludes the paper.
+
+\section{Related Work}
+\label{sec:related}
+
+\subsection{Gradient Inversion Attacks}
+
+Gradient inversion attacks (GIA) exploit information contained in communicated gradients or model updates to reconstruct training data.
+Zhu \textit{et al.} \cite{zhu2019dlg} first showed that individual samples can be reconstructed by solving an optimization problem that matches observed gradients with synthetic inputs. Geiping \textit{et al.} \cite{geiping2020inverting} improved reconstruction robustness using cosine similarity objectives and regularization priors, demonstrating high-fidelity recovery under realistic settings.
+ 
+While early studies focused on image data, subsequent research indicates that tabular data are highly vulnerable. TabLeak \cite{vero2023tableak} showed that mixed-type tabular records can be reconstructed by relaxing categorical variables during optimization and projecting them back to valid discrete domains. Unlike images, tabular attributes directly encode semantically meaningful identifiers, making partial reconstruction particularly sensitive. Surveys such as \cite{zhang2022surveyGI} confirm that optimization-based inversion remains broadly applicable and does not require access to raw data beyond the observed gradients and model parameters.
+IoT traffic datasets typically contain a mixture of categorical protocol identifiers and continuous traffic statistics. Such mixed-type features exhibit strong semantic structure and may produce gradients that are more directly interpretable than high-dimensional image representations.
+
+Despite these advances, limited work specifically examines gradient inversion risks in IoT intrusion detection contexts, where feature distributions are heterogeneous and often highly structured.
+
+\subsection{Privacy-Preserving Mechanisms in Federated Learning}
+
+Several mechanisms of defense have been proposed to reduce information leakage from client updates. Differential privacy (DP) bounds the contribution of each client by clipping updates and injecting calibrated Gaussian noise \cite{dwork2014dp,abadi2016dp}. In federated settings, privacy guarantees are typically composed across rounds using privacy accountants such as R\'enyi DP \cite{mironov2017rdp}. While DP provides formal $(\varepsilon,\delta)$ guarantees, empirical evidence indicates that utility degradation can be significant under heterogeneous (non-IID) client distributions \cite{geyer2017dpfl}. Homomorphic encryption (HE) enables aggregation directly over encrypted updates. Additive schemes such as Paillier \cite{paillier1999} and approximate schemes such as CKKS \cite{cheon2017ckks} support secure aggregation of real-valued model updates, and practical instantiations for deep learning have been explored in \cite{phong2018he}. HE protects confidentiality against an honest-but-curious server but introduces substantial computation and communication overhead. Secure aggregation protocols based on additive secret sharing \cite{shamir1979,bonawitz2017secureagg} ensure that only an aggregated update is revealed to the server, reducing server-side observability of individual client signals with lower overhead than HE. Recent results further indicate that secure aggregation alone does not eliminate reconstruction risks when adversarial clients participate in the protocol \cite{Sun2024ClientSideGIA}, motivating mechanisms that also reduce the information content of transmitted updates. Update quantization has primarily been studied for communication efficiency. QSGD \cite{alistarh2017qsgd} applies stochastic quantization while preserving convergence in expectation. However, quantization alone does not provide formal privacy guarantees, and its impact on gradient inversion resistance remains insufficiently characterized.  In particular, there is limited analysis of how layer-wise mixed-precision quantization interacts with secure aggregation for tabular intrusion-detection workloads under non-IID client distributions.
+
+%\subsection{Research Gap}
+
+%Existing literature establishes that gradient inversion is feasible in federated learning and that tabular data are vulnerable to reconstruction. Privacy defenses such as DP, HE, and secure aggregation have been studied largely in isolation and predominantly on image benchmarks. There remains a lack of unified evaluation of these mechanisms in tabular IoT intrusion detection, especially under heterogeneous client distributions.
+
+%Moreover, the combined effect of reducing update precision and restricting access to individual gradients has not been thoroughly characterized against optimization-based inversion attacks. 
+
+%This gap motivates a systematic comparison of differential privacy, homomorphic encryption, and a secure quantized multi-party computation scheme within a controlled federated intrusion-detection framework.
+
+
+
+\section{System Model}
+\label{sec:system}
+
+\subsection{Federated Learning Framework}
+
+We consider a cross-device federated learning architecture (FL) for collaborative IoT intrusion detection \cite{mcmahan2017fedavg}. 
+A central server coordinates $K$ distributed clients. Client $k$ holds a private dataset
+\[
+\mathcal{D}_k = \{(x_i^{(k)}, y_i^{(k)})\}_{i=1}^{n_k},
+\qquad
+\sum_{k=1}^{K} n_k = N,
+\]
+where $x_i^{(k)} \in \mathbb{R}^d$ denotes a preprocessed tabular feature vector composed of standardized continuous traffic statistics and encoded categorical attributes, and $y_i^{(k)} \in \{1,\dots,C\}$ is the intrusion label.
+
+The learning model is a multilayer perceptron (MLP) parameterized by $w \in \mathbb{R}^p$. 
+The local empirical risk at client $k$ is
+\begin{equation}
+F_k(w)
+=
+\frac{1}{n_k}
+\sum_{(x,y)\in\mathcal{D}_k}
+\ell(f(x;w),y),
+\end{equation}
+and the global objective optimized through weighted FedAvg is
+\begin{equation}
+F(w)
+=
+\sum_{k=1}^{K}
+\frac{n_k}{N}
+F_k(w).
+\end{equation}
+
+Training proceeds in synchronous communication rounds. At round $t$, the server broadcasts $w^{(t)}$ to participating clients $\mathcal{S}^{(t)}$. 
+Each client performs $E$ local SGD epochs and produces the update
+\begin{equation}
+\Delta w_k^{(t)} = w_k^{(t+1)} - w^{(t)}.
+\end{equation}
+The server applies weighted aggregation:
+\begin{equation}
+w^{(t+1)}
+=
+w^{(t)}
++
+\eta_s
+\sum_{k \in \mathcal{S}^{(t)}}
+\frac{n_k}{\sum_{j \in \mathcal{S}^{(t)}} n_j}
+\,
+\Delta w_k^{(t)}.
+\end{equation}
+The vectors $\{\Delta w_k^{(t)}\}$ constitute the primary exposure surface for gradient inversion attacks.
+
+
+%\subsection{Secure Quantized Multi-Party Computation (FL-SQMPC)}
+\subsection{FL-SQMPC System Architecture}
+
+To prevent exposure of individual updates to an honest-but-curious server, we introduce FL-SQMPC, which combines mixed-precision quantization with additive secret sharing over a prime field \cite{shamir1979,bonawitz2017secureagg}.
+
+Let $M$ be a large prime and let all integer operations be performed in $\mathbb{Z}_M$. 
+Each client partitions $\Delta w_k^{(t)}$ by layer $\ell \in \{0,\dots,L-1\}$ and applies layer-wise mixed-precision quantization:
+\begin{equation}
+Q_k^{(t)}[\ell]
+=
+\mathcal{Q}_{b_\ell}\!\left(\Delta w_k^{(t)}[\ell]\right),
+\qquad
+Q_k^{(t)} =
+\bigoplus_{\ell=0}^{L-1} Q_k^{(t)}[\ell],
+\end{equation}
+where $b_\ell \in \{2,8,12\}$ controls the precision per layer.
+
+The quantized update is encoded deterministically using a global scaling factor $\sigma>0$:
+\begin{equation}
+E_k^{(t)}
+=
+\left\lfloor
+\sigma Q_k^{(t)}
+\right\rceil
+\bmod M.
+\end{equation}
+To implement weighted FedAvg in the integer domain,
+\begin{equation}
+Z_k^{(t)}
+=
+n_k E_k^{(t)}
+\bmod M.
+\end{equation}
+The parameters $(\sigma,M)$ are selected to prevent modular overflow:
+\begin{equation}
+\sigma
+\cdot
+\max_j |Q_k^{(t)}[j]|
+\cdot
+\sum_{k \in \mathcal{S}^{(t)}} n_k
+<
+\frac{M}{2}.
+\end{equation}
+
+Each client splits $Z_k^{(t)}$ into $S$ additive shares:
+\begin{equation}
+Z_k^{(t)}
+=
+\sum_{s=1}^{S}
+R_{k,s}^{(t)}
+\pmod{M}.
+\end{equation}
+The aggregator $s$ computes
+\begin{equation}
+A_s^{(t)}
+=
+\sum_{k \in \mathcal{S}^{(t)}}
+R_{k,s}^{(t)}
+\bmod M,
+\end{equation}
+and forwards $A_s^{(t)}$ to the server. 
+The server reconstructs
+\begin{equation}
+A_w^{(t)}
+=
+\sum_{s=1}^{S}
+A_s^{(t)}
+\bmod M
+=
+\sum_{k \in \mathcal{S}^{(t)}}
+Z_k^{(t)}
+\bmod M.
+\end{equation}
+Let $N_t = \sum_{k \in \mathcal{S}^{(t)}} n_k$. 
+After modular recentering to $(-M/2,M/2]$, the decoded update is
+\begin{equation}
+\widehat{\Delta w}^{(t)}
+=
+\frac{1}{\sigma N_t}
+\mathrm{Recenter}\!\left(A_w^{(t)}\right),
+\end{equation}
+and the global model is updated accordingly.
+
+Under a semi-honest assumption and a non-collusion condition where at least one aggregator does not collude with the server, additive secret sharing provides information-theoretic hiding of each individual client update.
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=\textwidth]{arch.pdf}
+    \caption{Overview of 1 round of federated learning workflow. 1: The server broadcasts the global model to all clients; 2: Each client performs local training on private data; 3: clients quantize their updates using mixed‑precision scaling; 4: quantized updates are split into additive shares and securely aggregated through SMPC;  5: A trusted authority reconstructs the aggregated update and forwards it to the server; and 6: the server updates the global model for the next round}
+    \label{fig:sysmo}
+\end{figure*}
+
+
+\begin{algorithm}[t]
+\SetAlgoLined
+\DontPrintSemicolon
+\small
+\KwIn{Initial global model $w^{(0)}$; rounds $T$; client set $\{1,\dots,K\}$; aggregators $\{1,\dots,S\}$; prime modulus $M$; scale $\sigma$; client LR $\eta_c$; server LR $\eta_s$; local epochs $E$; batch size $B$}
+\KwOut{Final global model $w^{(T)}$}
+
+\For{$t \gets 0$ \KwTo $T-1$}{
+    Server selects participating clients $\mathcal{S}^{(t)} \subseteq \{1,\dots,K\}$ and broadcasts $w^{(t)}$\;
+
+    \tcp{Phase 1: Client-side training and protected update preparation}
+    \ForEach{$k \in \mathcal{S}^{(t)}$}{
+        \tcp{Local training (FedAvg)}
+        $w_k^{(t+1)} \gets \textsc{LocalTrain}(w^{(t)}, \mathcal{D}_k, E, B, \eta_c)$\;
+        $\Delta w_k^{(t)} \gets w_k^{(t+1)} - w^{(t)}$\;
+
+        \tcp{Mixed-precision quantization and fixed-point encoding}
+        $Q_k^{(t)} \gets \textsc{MixedQuantize}(\Delta w_k^{(t)})$\;
+        $E_k^{(t)} \gets \textsc{Encode}_{\sigma,M}(Q_k^{(t)}) \in \mathbb{Z}_M^p$\;
+
+        \tcp{Weighted FedAvg in the integer domain}
+        $Z_k^{(t)} \gets n_k \cdot E_k^{(t)} \bmod M$\;
+
+        \tcp{Additive secret sharing to $S$ aggregators}
+        $\{R_{k,1}^{(t)},\dots,R_{k,S}^{(t)}\} \gets \textsc{SecretShare}_M(Z_k^{(t)}, S)$\;
+        \For{$s \gets 1$ \KwTo $S$}{
+            Send $R_{k,s}^{(t)}$ to aggregator $s$\;
+        }
+    }
+
+    \tcp{Phase 2: Secure aggregation at aggregators}
+    \For{$s \gets 1$ \KwTo $S$}{
+        $A_s^{(t)} \gets \sum_{k \in \mathcal{S}^{(t)}} R_{k,s}^{(t)} \bmod M$\;
+        Send $A_s^{(t)}$ to server\;
+    }
+
+    \tcp{Phase 3: Reconstruction, decoding, and global update}
+    $A_w^{(t)} \gets \sum_{s=1}^{S} A_s^{(t)} \bmod M$\;
+    $N_t \gets \sum_{k \in \mathcal{S}^{(t)}} n_k$\;
+    $\widehat{\Delta w}^{(t)} \gets \textsc{Decode}_{\sigma,M}\!\left(A_w^{(t)}\right) / N_t$\;
+    $w^{(t+1)} \gets w^{(t)} + \eta_s \, \widehat{\Delta w}^{(t)}$\;
+}
+\Return{$w^{(T)}$}\;
+\caption{FL-SQMPC}
+\label{alg:sqmpce}
+\end{algorithm}
+
+%TODO move this subsection elsewhere?
+\subsection{Comparative Protection Mechanisms}
+
+For comparative evaluation, we also implement differential privacy (DP) and homomorphic encryption (HE) within the same FL optimization pipeline.
+
+Client-level DP limits the contribution of each client by clipping updates and injecting calibrated Gaussian noise prior to transmission \cite{dwork2014dp,abadi2016dp}. Privacy accounting follows standard composition principles such as Rényi differential privacy \cite{mironov2017rdp}.
+
+Homomorphic encryption enables aggregation directly in the encrypted domain. Additive schemes such as Paillier \cite{paillier1999} and approximate schemes such as CKKS \cite{cheon2017ckks} allow the server to compute aggregated updates without accessing individual plaintext values.
+
+These mechanisms modify the communication layer but preserve the weighted FedAvg objective defined above
+
+
+\section{Threat model}
+\label{sec:threat}
+
+We consider the federated learning system defined in \ref{sec:system}  distinguishing between two  threat scenarios: (i) honest-but-curious servers observing defended updates on the network, and (ii) compromised or colluding secure aggregators potentially reconstructing individual client updates. 
+
+The first scenario is following the honest-but-curious (HBC) threat model established in FL literature , the central server is assumed to correctly implement federated averaging but attempts to reconstruct client training data from intercepted model updates. This scenario models adversaries with network access to training traffic or direct observation of server-side logs. 
+The HBC server is assumed to possess knowledge of the model architecture (layer dimensions, activations, weight initialization), the training configuration (loss function, optimizer type and hyperparameters including learning rate $\eta$, batch size $B$, local steps $K$), and realistic domain knowledge including valid feature ranges $x_i \in [\min_i, \max_i]$ per feature, categorical structure such as one-hot encodings and class distributions $P(y)$, preprocessing pipelines (StandardScaler parameters, OneHotEncoder mappings), and public datasets such as traffic patterns or known attack signatures.
+
+
+The second threat scenario models is an attacker who has compromised or colluded with one or more secure aggregators. If an attacker compromises a single aggregator, they extract that aggregator's shares but lack the complementary shares to reconstruct individual gradients. However, under collusion reaching threshold $m-1$ of $m$ total aggregators, the attacker can solve for the missing share: $s_m^{(k)} = \Delta\theta_k' \oplus s_1^{(k)} \oplus \cdots \oplus s_{m-1}^{(k)}$, thereby recovering the complete individual gradient $\Delta\theta_k'$. Once reconstructed, the attacker applies standard Scenario~1 attacks (DLG, iDLG, TabLeak) with additional advantages including access to multi-round trajectories $\{\Delta\theta_k^{(t)}\}_{t=1}^T$ for temporal correlation analysis, offline computational budget with no real-time constraints, and ensemble voting across rounds for improved reconstruction quality.
+
+
+
+
+
+\section{Implementation}
+In this section, we detail the experimental pipeline used to evaluate our system model. We describe the runtime environment, the federated training configuration, the compared aggregation modes, and the datasets and partitioning strategies used in our experiments.
+
+
+
+\subsection{Experimental setup}
+\label{sec:experimental_setup}
+
+Experiments were conducted in a Python-based environment using PyTorch and executed on a CUDA-enabled GPU. Federated training is simulated with $K$ clients, each assigned a disjoint local subset.
+
+Training follows the FedAvg protocol \cite{mcmahan2017fedavg}. At each round, selected clients initialize their local model with the broadcast global parameters and perform a fixed number of local training epochs using stochastic gradient descent over their local data. Model updates are computed as parameter-wise differences between the locally trained model and the received global model. The server aggregates these model deltas and applies the update with a fixed server learning rate.
+
+We compare four aggregation modes. In the \emph{vanilla} setting, model updates are transmitted in the clear and averaged by the server. In the \emph{differential privacy (DP)} setting, each client clips its model update to an $\ell_2$ norm bound $C$ and adds Gaussian noise scaled by a noise multiplier $\sigma$, following DP-SGD \cite{abadi2016dp}, with privacy tracked using a R\'enyi differential privacy accountant \cite{mironov2017rdp}. In the \emph{homomorphic encryption (HE)} setting, model updates are encoded and encrypted using the CKKS approximate homomorphic encryption scheme \cite{cheon2017ckks} via Pyfhel and aggregated by homomorphic addition, with decryption performed once per round. In the proposed \emph{FL-SQmpc} setting, quantized model updates are encoded into a prime field, split into additive shares \cite{shamir1979}, and aggregated through three non-colluding helpers following secure aggregation principles \cite{bonawitz2017secureagg}, such that only the cohort-level update is reconstructed at the server.
+%TODO update avec tous les hyperparametres 
+All experiments were conducted with $K=20$ federated clients under synchronous FedAvg training. The learning model is a fully connected multilayer perceptron (MLP) . In FL-SQMPC, model updates were quantized using a mixed-precision scheme (12–8–12 bits for first, intermediate, and final layers, respectively), encoded with a global scaling factor $\sigma$, and mapped into a large prime field $\mathbb{Z}_M$. Additive secret sharing was performed with $S=2$ non-colluding aggregators. For DP, client updates were $\ell_2$-clipped and perturbed with Gaussian noise, with privacy accounting based on Rényi Differential Privacy. HE-based aggregation used CKKS encryption for ciphertext-domain summation with chunk 2048. All models were trained for 50 communication rounds under both IID and non-IID partitions.
+
+
+
+\begin{table}[t]
+\centering
+\caption{MLP architecture and training hyperparameters for CICIoT2023 and Bot-IoT}
+\label{tab:mlp_hyperparams}
+
+\renewcommand{\arraystretch}{1.15}
+
+\begin{tabularx}{\linewidth}{|X|X|X|}
+\hline
+\textbf{Parameter} & \textbf{CICIoT2023} & \textbf{Bot-IoT} \\
+\hline
+
+Input dimension & $d$ features & $d$ features \\
+\hline
+
+Hidden layer 1 & 256 neurons & 128 neurons \\
+\hline
+
+Hidden layer 2 & 128 neurons & 64 neurons \\
+\hline
+
+Output layer & $C$ classes & $C$ classes \\
+\hline
+
+Activation function & ReLU & GELU \\
+\hline
+
+Dropout rate & 0.3 & 0.10 / 0.05 \\
+\hline
+
+Optimizer & Adam & AdamW \\
+\hline
+
+Learning rate & $5 \times 10^{-4}$ & $5 \times 10^{-4}$ \\
+\hline
+
+Weight decay & $1 \times 10^{-4}$ & $1 \times 10^{-4}$ \\
+\hline
+
+Loss function & Focal Loss ($\gamma = 2.0$) & CrossEntropyLoss  \\
+\hline
+
+Local epochs & 2 & 1 \\
+\hline
+
+\end{tabularx}
+
+\end{table}
+
+
+\subsection{Datasets Description}
+\label{sec:dataset}
+
+We evaluate our framework on Three IoT intrusion detection benchmarks: \textbf{Bot-IoT} \cite{moustafa2019botiot}, \textbf{CICIoT2023} \cite{ciciot2023dataset} \textbf{ToNIoT} \cite{toniot}. For both datasets, we use a 5\% subset of the available records to keep computational cost tractable under privacy-preserving training while preserving attack diversity. We evaluate both \textbf{binary} detection (Benign vs. Attack) and \textbf{multi-class} classification using the label mappings in Tables~\ref{tab:botiot_class_mappings} and~\ref{tab:ciciot2023_mapping}. Data are distributed across clients under both \textbf{IID} and \textbf{non-IID} partitions.
+
+Bot-IoT contains IoT network traffic generated in a controlled testbed combining benign IoT activity with malicious behaviors, including DDoS, reconnaissance, and data exfiltration attacks \cite{moustafa2019botiot}. In the binary setting, all malicious categories are merged into a single \emph{Attack} label. In the multi-class setting, attacks are grouped into three coarse families: \emph{DDoS/DoS}, \emph{Reconnaissance}, and \emph{Theft/Exfiltration}, in addition to the \emph{Normal} class.
+
+CICIoT2023 is a large-scale IoT traffic dataset containing benign activity and diverse attack families across multiple IoT scenarios \cite{ciciot2023dataset}. We define a binary task (Benign vs. Attack) and a multi-class task with seven labels corresponding to major attack families, including DDoS, DoS, Web attacks, Brute force, Spoofing, and Mirai-related traffic.
+
+For each dataset and task, we generate two client data distributions. In the \textbf{IID} setting, each client receives a stratified random subset approximating the global label distribution. In the \textbf{non-IID} setting, we introduce label skew by allocating dominant classes to subsets of clients, yielding heterogeneous local class proportions.
+
+
+\begin{table}[!t]
+\caption{BotIoT Class Mapping for Binary/Multiclass Classification }
+\label{tab:botiot_class_mappings}
+\centering
+\footnotesize
+\begin{tabularx}{\columnwidth}{|c|X|c|c|}
+\hline
+\textbf{Label} & \textbf{Included Attacks} & \textbf{Multiclass} & \textbf{Binary} \\ \hline
+ Normal & Normal IoT traffic & 0 & 0 \\ \hline
+ DDoS/DoS & DoS TCP, DoS UDP, DoS HTTP, DDoS TCP, DDoS UDP, DDoS HTTP & 1 & 1 \\ \hline
+ Reconnaissance & Service Scan, OS Scan, Fuzzing & 2 & 1 \\ \hline
+ Theft / Exfiltration & Data Exfiltration, Keylogging, Theft Attack &3 & 1 \\ \hline
+\end{tabularx}
+\end{table}
+
+\begin{table}[!t]
+\caption{CICIoT2023 Class Mapping for Binary/Multiclass Classification}
+
+\label{tab:ciciot2023_mapping}
+\centering
+\footnotesize
+\begin{tabularx}{\columnwidth}{|c|X|c|c|}
+\hline
+\textbf{Label} & \textbf{Included Attacks} & \textbf{Multiclass} & \textbf{Binary} \\ \hline
+Benign & Normal IoT traffic & 0 & 0 \\ \hline
+DDoS & SYN Flood, UDP Flood, HTTP Flood & 1 & 1 \\ \hline
+DoS & Slowloris, GoldenEye, DoS HTTP/TCP & 2 & 1 \\ \hline
+Web Attacks & SQL Injection, XSS, Command Injection & 3 & 1 \\ \hline
+Brute Force & SSH Brute Force, FTP Brute Force & 4 & 1 \\ \hline
+Spoofing & ARP Spoofing, IP Spoofing & 5 & 1 \\ \hline
+Mirai & Mirai Scan, ACK Flood, SYN Flood & 6 & 1 \\ \hline
+
+\end{tabularx}
+\end{table}
+
+\begin{table}[!t]
+\centering
+\caption{Class Distribution in ToN-IoT, BoT-IoT, and CICIoT2023 Datasets}
+\label{tab:datasets_distribution}
+
+\scriptsize
+\renewcommand{\arraystretch}{1.05}
+\setlength{\tabcolsep}{3pt}
+
+\begin{tabular}{|l|r||l|r||l|r|}
+\hline
+\multicolumn{2}{|c||}{\textbf{ToN-IoT}} &
+\multicolumn{2}{c||}{\textbf{BoT-IoT}} &
+\multicolumn{2}{c|}{\textbf{CICIoT2023}} \\
+\hline
+
+\textbf{Class} & \textbf{Samples} &
+\textbf{Class} & \textbf{Samples} &
+\textbf{Class} & \textbf{Samples} \\
+\hline
+
+Normal        & 9000 & Normal              & 9543  & Benign     & 10525 \\
+Scanning      & 6000 & DDoS/DoS            & 20000 & DDoS       & 16297 \\
+DoS           & 6000 & Reconnaissance      & 20000 & DoS        & 11629 \\
+Ransomware    & 6000 & Information Theft   & 1587  & BruteForce & 106 \\
+Backdoor      & 6000 &                     &       & Spoofing   & 4788 \\
+Injection     & 6000 &                     &       & Recon      & 3410 \\
+XSS           & 6000 &                     &       & Web        & 221 \\
+Password      & 6000 &                     &       & Mirai      & 6276 \\
+MITM          & 313  &                     &       &            &      \\
+\hline
+
+\textbf{Total} & \textbf{57313} &
+\textbf{Total} & \textbf{51130} &
+\textbf{Total} & \textbf{53252} \\
+\hline
+
+\end{tabular}
+\end{table}
+
+\subsection{Evaluation metrics}
+
+\subsubsection{Reconstruction Evaluation}
+
+Evaluating GIA on tabular IoT datasets requires a metric that accounts for the heterogeneous nature of the features. Unlike image data, where pixel-wise comparison is meaningful, tabular features differ widely in scale, type, and semantics (Continuous traffic statistics, categorical protocol identifiers, and normalized counters). A direct numerical comparison, such as mean squared error, would therefore not reflect whether a reconstructed feature is semantically correct.
+
+To address this, we adopt the \emph{tolerance map} introduced in TabLeak ~\cite{vero2023tableak}. For each feature $f_i$, a tolerance value $\tau_i$ is calculated from the empirical distribution of the dataset. Continuous features receive a tolerance proportional to their natural variability, while categorical features receive a strict tolerance of zero, enforcing exact reconstruction. A reconstructed feature $\hat{x}_i$ is considered correct if:
+\begin{equation}
+    |\hat{x}_i - x_i| \le \tau_i.
+\end{equation}
+
+This yields a binary correctness mask over all $d$ features, from which we compute the reconstruction accuracy:
+\begin{equation}
+    \text{Accuracy} = 1 - \frac{1}{d} \sum_{i=1}^{d} \mathbf{1}\left(|\hat{x}_i - x_i| > \tau_i\right).
+\end{equation}
+
+%We capture whether the attacker recovers semantically valid feature values rather than merely minimizing numerical error. This is particularly important  where features span several orders of magnitude and are often normalized. 
+
+
+ \begin{figure*}[t!]
+     \subfloat[\label{subfig-2:channel}]{%
+       \includegraphics[width=0.48\textwidth]{lossbotbin_IID.pdf}
+     }
+        \subfloat[\label{subfig-1:band}]{%
+       \includegraphics[width=0.48\textwidth]{lossbotbin_Non-IID.pdf}
+     }
+     \caption{Model loss for binary classification for our Proposed SQMPC and baselines for  50 rounds on BoTIoT dataset: (a) under IID distributions; and (b) under Non-IID distributions.}
+     \label{fig:binlossbot}
+   \end{figure*}
+
+
+    \begin{figure*}[t!]
+     \subfloat[\label{subfig-2:channel}]{%
+       \includegraphics[width=0.48\textwidth]{lossbincicIID.pdf}
+     }
+        \subfloat[\label{subfig-1:band}]{%
+       \includegraphics[width=0.48\textwidth]{lossbincicNonIID.pdf}
+     }
+     \caption{Model loss for binary classification for our Proposed SQMPC and baselines for the 50 rounds case using the CICIoT2023 dataset: (a) under IID distributions; and (b) under Non-IID distributions.}
+     \label{fig:binlosscic}
+   \end{figure*}
+
+% \begin{figure*}[t]
+%     \centering
+
+%     \subfloat[a]{
+%         \includegraphics[width=0.2\textwidth]{lossbotbin_IID.pdf}
+%     }\hfill
+%     \subfloat[b]{
+%         \includegraphics[width=0.2\textwidth]{lossbotbin_Non-IID.pdf}
+%     }\hfill
+%     \subfloat[c]{
+%         \includegraphics[width=0.2\textwidth]{lossbincicIID.pdf}
+%     }\hfill
+%     \subfloat[d]{
+%         \includegraphics[width=0.2\textwidth]{lossbincicNonIID.pdf}
+%     }
+
+%     \caption{Training model losses of HE, SQMPC, DP, and vanilla FL on BotIoT (a)(b)and CICIoT2023 (c)(d)datasets for 50 rounds for binary classification under IID and Non-IID distributions.}
+%     \label{fig:lossbin}
+% \end{figure*}
+
+
+
+ \begin{figure*}[t!]
+     \subfloat[\label{subfig-2:channel}]{%
+       \includegraphics[width=0.48\textwidth]{LOSSbotmulti_IID.pdf}
+     }
+        \subfloat[\label{subfig-1:band}]{%
+       \includegraphics[width=0.48\textwidth]{LOSSbotmulti_NonIID.pdf}
+     }
+     \caption{Model loss for Multi-class classification for our Proposed SQMPC and baselines for the 50 rounds case using the BoTIoT dataset: (a) under IID distributions; and (b) under Non-IID distributions.}
+     \label{fig:multilossbit}
+   \end{figure*}
+
+
+    \begin{figure*}[t!]
+     \subfloat[\label{subfig-2:channel}]{%
+       \includegraphics[width=0.48\textwidth]{lossmulticicIID.pdf}
+     }
+        \subfloat[\label{subfig-1:band}]{%
+       \includegraphics[width=0.48\textwidth]{lossmulticicNonIID.pdf}
+     }
+     \caption{Model loss for Multi-class classification for our Proposed SQMPC and baselines for the 50 rounds case using the CICIoT2023 dataset: (a) under IID distributions; and (b) under Non-IID distributions.}
+     \label{fig:multilosscic}
+   \end{figure*}
+
+
+
+% \begin{figure*}[t]
+%     \centering
+
+%     \subfloat[a]{
+%         \includegraphics[width=0.2\textwidth]{LOSSbotmulti_IID.pdf}
+%     }\hfill
+%     \subfloat[b]{
+%         \includegraphics[width=0.2\textwidth]{LOSSbotmulti_NonIID.pdf}
+%     }\hfill
+%     \subfloat[s]{
+%         \includegraphics[width=0.2\textwidth]{lossmulticicIID.pdf}
+%     }\hfill
+%     \subfloat[d]{
+%         \includegraphics[width=0.2\textwidth]{lossmulticicNonIID.pdf}
+%     }
+%     \caption{Training model losses of HE, SQMPC, DP, and vanilla FL on BotIoT and CICIoT2023 datasets for 50 rounds  for multiclass classification under IID and Non-IID distributions.}
+%     \label{fig:lossmulti}
+% \end{figure*}
+
+
+
+% \begin{figure*}[t]
+%     \centering
+
+%     \subfloat[a]{
+%         \includegraphics[width=0.2\textwidth]{accuracybotbin_IID.pdf}
+%     }\hfill
+%     \subfloat[b]{
+%         \includegraphics[width=0.2\textwidth]{accuracybotbin_IID.pdf}
+%     }\hfill
+%     \subfloat[c]{
+%         \includegraphics[width=0.2\textwidth]{accuracybincic_IID.pdf}
+%     }\hfill
+%     \subfloat[]{
+%         \includegraphics[width=0.2\textwidth]{accuracybincic_NonIID.pdf}
+%     }
+%        \caption{Training Model Accuracies of HE, SQMPC, DP, and vanilla FL on BotIoT and CICIoT2023 dataset for 50 rounds for binary classification under IId and NON IID Distribution}
+%      \label{fig:accuracybin}
+% \end{figure*}
+
+
+
+
+
+ \begin{figure*}[t!]
+     \subfloat[\label{subfig-2:channel}]{%
+       \includegraphics[width=0.48\textwidth]{accuracybotbin_IID.pdf}
+     }
+        \subfloat[\label{subfig-1:band}]{%
+       \includegraphics[width=0.48\textwidth]{accuracybotbin_IID.pdf}
+     }
+     \caption{Model Accuracies for binary classification for our Proposed SQMPC and baselines for the 50 rounds case using the BoTIoT dataset: (a) under IID distributions; and (b) under Non-IID distributions.}
+     \label{fig:binaccbot}
+   \end{figure*}
+
+
+    \begin{figure*}[t!]
+     \subfloat[\label{subfig-2:channel}]{%
+       \includegraphics[width=0.48\textwidth]{accuracybincic_IID.pdf}
+     }
+        \subfloat[\label{subfig-1:band}]{%
+       \includegraphics[width=0.48\textwidth]{accuracybincic_NonIID.pdf}
+     }
+     \caption{Model Accuracies for binary classification for our Proposed SQMPC and baselines for the 50 rounds case using the CICIoT2023 dataset: (a) under IID distributions; and (b) under Non-IID distributions.}
+     \label{fig:binacccic}
+   \end{figure*}
+
+
+
+% \begin{figure*}[t]
+%     \centering
+
+%     \subfloat[]{
+%         \includegraphics[width=0.2\textwidth]{accuracybotmulti_IID.pdf}
+%     }\hfill
+%     \subfloat[]{
+%         \includegraphics[width=0.2\textwidth]{accuracybotmulti_NonIID.pdf}
+%     }\hfill
+%     \subfloat[]{
+%         \includegraphics[width=0.2\textwidth]{accuracymulticicIID.pdf}
+%     }\hfill
+%     \subfloat[]{
+%         \includegraphics[width=0.2\textwidth]{accuracymulticicNonIID.pdf}
+%     }
+
+%        \caption{Training Model Accuracies of HE, SQMPC, DP, and vanilla FL on BotIoT and CICIoT2023 dataset for 50 rounds for Multiclass classification under IId and NON IID Distribution}
+%      \label{fig:accuracymulti}
+% \end{figure*}
+
+
+     \begin{figure*}[t!]
+     \subfloat[\label{subfig-2:channel}]{%
+       \includegraphics[width=0.48\textwidth]{accuracybotmulti_IID.pdf}
+     }
+        \subfloat[\label{subfig-1:band}]{%
+       \includegraphics[width=0.48\textwidth]{accuracybotmulti_NonIID.pdf}
+     }
+     \caption{Model Accuracies for Multi-class classification for our Proposed SQMPC and baselines for the 50 rounds case using the BoTIoT dataset: (a) under IID distributions; and (b) under Non-IID distributions.}
+     \label{fig:multiaccbot}
+   \end{figure*}
+
+
+    \begin{figure*}[t!]
+     \subfloat[\label{subfig-2:channel}]{%
+       \includegraphics[width=0.48\textwidth]{accuracymulticicIID.pdf}
+     }
+        \subfloat[\label{subfig-1:band}]{%
+       \includegraphics[width=0.48\textwidth]{accuracymulticicNonIID.pdf}
+     }
+     \caption{Model Accuracies for Multi-class classification for our Proposed SQMPC and baselines for the 50 rounds case using the CICIoT2023 dataset: (a) under IID distributions; and (b) under Non-IID distributions.}
+     \label{fig:multiacccic}
+   \end{figure*}
+
+   \begin{figure*}[t]
+    \centering
+
+   
+    \subfloat[]{
+        \includegraphics[width=0.42\textwidth]{botiot_fl_time.pdf}
+    }\hfill
+    \subfloat[]{
+        \includegraphics[width=0.42\textwidth]{ciciotmulti_fl_time.pdf}
+    }
+
+       \caption{Total time of FL process training between HE, SQMPC, DP, and vanilla FL on BotIoT and CICIoT2023 dataset for 50 rounds for  Multiclass classification}
+     \label{fig:fltime}
+\end{figure*}
+
+
+
+\subsection{Performance Evaluation}
+\label{sec:results}
+
+
+Figure~\ref{fig:binlossbot} and figure~\ref{fig:binlosscic} reports binary classification losses on BotIoT and CICIoT2023 under IID and non-IID partitions. Vanilla FL, HE, and SQMPC exhibit nearly identical convergence trajectories on both datasets. Their final losses converge to comparable values, indicating that homomorphic encryption and secure quantized aggregation do not disrupt optimization dynamics. 
+
+DP consistently converges to a higher loss, particularly under non-IID settings. The injected Gaussian noise interacts with heterogeneous client gradients, resulting in slower stabilization and a higher asymptotic loss.
+
+Figure~\ref{fig:multilossbit} and figure~\ref{fig:multilosscic} presents multiclass losses. As expected, losses are higher than in the binary case due to increased task complexity. However, the relative behavior remains consistent: vanilla FL, HE, and SQMPC overlap closely, while DP maintains a visible gap that widens under non-IID distributions.
+
+Accuracy trends in Figures~\ref{fig:binaccbot},~\ref{fig:binacccic}, ~\ref{fig:multiacccic} and ~\ref{fig:multiaccbot} confirm the loss analysis. In binary classification, vanilla FL, HE, and SQMPC increase during early rounds and reach nearly identical final accuracies across both datasets. The overlap between vanilla FL and SQMPC demonstrates that mixed-precision quantization and modular aggregation preserve discriminative performance.
+
+DP achieves lower accuracy, with a more pronounced degradation under non-IID partitions. This effect is amplified in the multiclass setting  where class heterogeneity increases sensitivity to injected noise.
+
+Figure~\ref{fig:fltime} reports total training time over 50 rounds. HE is the slowest method due to CKKS encoding and homomorphic arithmetic overhead. SQMPC remains close to vanilla FL, as integer encoding and additive secret sharing introduce limited computational cost. DP is the fastest method since it only performs local clipping and noise addition.
+
+These results show that SQMPC provides a substantially lower overhead than HE while preserving comparable predictive performance.
+
+\begin{table*}[t]
+\centering
+\caption{Performance comparison on CICIot2023 under IID and Non-IID settings for multiclass Classification}
+\label{tab:results}
+\small
+\begin{tabular}{lccccc ccccc}
+\toprule
+& \multicolumn{5}{c}{ IID} & \multicolumn{5}{c}{ Non-IID} \\
+\cmidrule(lr){2-6} \cmidrule(lr){7-11}
+Method 
+& Accuracy & Recall & Precision & F1 & AvgAcc 
+& Accuracy & Recall & Precision & F1 & AvgAcc \\
+\midrule
+
+Deep-IFS \cite{10376416} 
+& 0.7395 & 0.5424 & 0.6874 & 0.6064 & 0.7381 
+& 0.7034 & 0.4675 & 0.7078 & 0.5631 & 0.6799 \\
+
+Fed-CNN \cite{10376416} 
+& 0.7615 & 0.5655 & 0.7249 & 0.6353 & 0.7603 
+& 0.6918 & 0.5099 & 0.6913 & 0.5869 & 0.6506 \\
+
+Fed-DNN \cite{10376416}  
+& 0.7446 & 0.5478 & 0.6974 & 0.6136 & 0.7427 
+& 0.6646 & 0.4625 & 0.6585 & 0.5434 & 0.6136 \\
+
+DFSAT \cite{10376416}  
+& 0.7479 & 0.5481 & 0.7028 & 0.6159 & 0.7470 
+& 0.7048 & 0.4855 & 0.6904 & 0.5701 & 0.6762 \\
+
+DFF-SC4N \cite{10376416} 
+& 0.7287 & 0.5252 & 0.6782 & 0.5919 & 0.7284 
+& 0.6887 & 0.4670 & 0.7256 & 0.5683 & 0.6810 \\
+
+CIDIoT \cite{10376416} 
+& 0.7720 & 0.5753 & 0.7144 & 0.6373 & 0.7677 
+& 0.7196 & 0.5482 & 0.7572 & 0.6360 & 0.6833 \\
+
+\midrule
+SQMP 
+& 0 & 0 & 0 & 0 & 0 
+& 0.790 & 0.603 & 0.716 & 0.622 & 0 \\
+
+\bottomrule
+\end{tabular}
+\end{table*}
+
+
+
+\subsubsection*{Overall Trade-off}
+
+Across both datasets and task settings, SQMPC achieves near-vanilla predictive performance with limited computational overhead, while substantially reducing gradient inversion success. HE provides strong confidentiality but incurs high computational cost. DP offers formal privacy guarantees but reduces utility, particularly in heterogeneous environments. These results indicate that SQMPC provides a favorable privacy–utility–efficiency balance for federated IoT intrusion detection.
+
+
+%s1 iid
+%s2 non iid
+\begin{table}[h]
+\caption{Performance metrics for different scenarios on $BotIoT$ dataset} % title of Table
+\begin{center}
+\begin{tabular}{ |p{2cm}|p{1cm}| p{1cm}| p{0.6cm}| p{0.8cm}| p{0.6cm}|}
+ \hline
+ \textbf{Scenarios} & \textbf{Accuracy}&\textbf{Precision} &\textbf{Recall}&\textbf{F1}&\textbf{Time}\\
+ \hline
+  
+      \textbf{Sc1\_binary\_r=20} & 0.9941&0.9909&0.9996&0.99028&172.34 \\
+       \hline
+          \textbf{Sc2\_binary\_r=20} & 0.9848&0.9809&0.9361&0.9550&172.34 \\
+       \hline
+        \textbf{Sc1\_binary\_r=40} & 0.9941&0.9909&0.9996&0.99028&172.34 \\
+       \hline
+          \textbf{Sc2\_binary\_r=40} & 0.9848&0.9809&0.9361&0.9550&172.34 \\
+       \hline
+       \textbf{Sc1\_multi\_r=40} & 0.9934&0.9915&0.9892&0.9903&172.34 \\
+       \hline
+       \textbf{Sc2\_multi\_r=40} & 0.9900&0.9895&0.9834&0.9864&172.34 \\
+       \hline
+       \textbf{Sc1\_multi\_r=20} & 0.9934 &0.9891&0.9883&0.9887&349.99 \\
+        \hline
+        \textbf{Sc2\_multi\_r=20} & 0.9873&0.9867&0.9791&0.9828&--- \\
+       
+     
+\hline
+\end{tabular}
+\end{center}
+\end{table}
+ % Overall, our findings reinforce that gradient-based leakage in federated learning is highly influenced by data heterogeneity, batch size, training stage
+
+%s1 iid
+%s2 non iid
+\begin{table}[h]
+\caption{Performance metrics for different scenarios on $CiCIoT2023$ dataset} % title of Table
+\begin{center}
+\begin{tabular}{ |p{2cm}|p{1cm}| p{1cm}| p{0.6cm}| p{0.8cm}| p{0.6cm}|}
+ \hline
+ \textbf{Scenarios} & \textbf{Accuracy}&\textbf{Precision} &\textbf{Recall}&\textbf{F1}\\
+ \hline
+           \textbf{Sc1\_binary\_r=60} & \textbf{0.916}&\textbf{0.991}&\textbf{0.903}&\textbf{0.918} \\
+   
+       
+       \hline
+       \textbf{Sc2\_binary\_r=60} & \textbf{0.897}&\textbf{0.86}&\textbf{0.897}&\textbf{0.891} \\
+\hline
+\end{tabular}
+\end{center}
+\end{table}
+
+
+
+
+
+\subsection{Discussion}
+
+The high reconstruction accuracy observed in the vanilla FL setting reflects the well-known vulnerability of tabular models: shallow MLP architectures and weak feature correlations make gradients highly informative, a property emphasized in TabLeak. Small batches leak more information since the aggregated gradient remains closely tied to individual samples, whereas larger batches dilute per-sample contributions and reduce the attacker’s ability to infer the underlying data.
+ We also observe a decline in reconstruction quality at later FL rounds, where early-round gradients are more reflective of raw data, while gradients produced by a more trained model become smoother and less discriminative. In Non-IID scenarios, client gradients diverge significantly, making the aggregated update less representative of any single client and thereby reducing the feasibility of accurate reconstruction. 
+
+
+
+
+
+
+
+
+
+
+\section{Conclusion and future work}
+\label{sec:conclusion}
+
+Federated learning is an emerging paradigm that enables collaborative training across distributed IoT environments without centralizing sensitive traffic data. On one hand, this decentralized training paradigm significantly reduces data exposure and aligns with privacy and regulatory constraints in IoT intrusion detection systems. On the other hand, the exchange of model updates introduces new privacy challenges, as gradient inversion attacks can reconstruct sensitive tabular features directly from communicated updates. This paper aimed to address gradient leakage in federated IoT intrusion detection while preserving model utility and efficiency under practical deployment constraints. For this purpose, we first analyzed the vulnerability of vanilla federated learning to gradient inversion attacks in tabular IoT settings under both IID and non-IID client distributions. Then, we evaluated differential privacy, homomorphic encryption, and secure aggregation within a unified experimental framework, highlighting their respective privacy–utility–efficiency trade-offs. Finally,
+
+\printbibliography
+\end{document}
