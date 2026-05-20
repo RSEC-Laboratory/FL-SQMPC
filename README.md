@@ -194,12 +194,8 @@ seeds × 3 datasets × {IID, Dirichlet α=0.3}.
 ```
 
 The `scripts/attacks/` package implements the three inversion attacks used in
-the paper:
-
-- **TabLeak** — softmax-relaxed tabular reconstruction (single-step and FedAvg
-  variants)
-- **DLG** — original Deep Leakage from Gradients
-- **iDLG** — improved DLG with label inference
+the paper: **TabLeak**, which is a softmax-relaxed tabular reconstruction (with
+both single-step and FedAvg variants).
 
 ### Generating figures and tables
 
